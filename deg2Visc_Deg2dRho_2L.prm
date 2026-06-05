@@ -1,0 +1,183 @@
+# A description of convection in a 3d spherical shell with
+# a very simple model
+
+# load additional shared libraries with own plugins
+set Additional shared libraries            = /cluster/projects/nn10016k/ESA/Aspect_plugins/libplugins.so
+
+# Define the number of space dimensions we would like to
+# work in:
+set Dimension                              = 3
+
+# Specify the time you want to let the model run for in
+# years and the output directory. Here we only calculate
+# the instantaneous solution.
+set End time                               = 0
+set Use years in output instead of seconds = true
+set Output directory                       = Output
+
+# The following variables describe how the pressure should
+# be normalized. Here, we choose a zero average pressure
+# at the surface of the domain. The 'Surface pressure' and
+# 'Adiabatic surface temperature' are used to compute
+# the adiabatic reference profile.
+set Pressure normalization                 = surface
+set Surface pressure                       = 0
+set Adiabatic surface temperature          = 1600
+
+# Here we specify the residual tolerance for the linear solver.
+subsection Solver parameters
+  subsection Stokes solver parameters
+    set Linear solver tolerance = 1e-4
+  end
+end
+
+# Here we specify the geometry of the domain, which is
+# a spherical shell with inner radius of 3481km and
+# outer radius of 6371km
+subsection Geometry model
+  set Model name = spherical shell
+  subsection Spherical shell
+    set Inner radius  = 3481000
+    set Outer radius  = 6371000
+  end
+end
+
+# This section specifies the temperature at the boundary of
+# the domain. Here we set the temperature to be constant,
+# but different from the reference temperature to approximate
+# boundary layers.
+subsection Boundary temperature model
+  set Fixed temperature boundary indicators = top, bottom
+  set List of model names = spherical constant
+  subsection Spherical constant
+    set Inner temperature = 2000
+    set Outer temperature = 1000
+  end
+end
+
+# This section describes the gravity field, which is pointing
+# towards the Earth's center with the same magnitude of 10 m/s^2
+# everywhere
+subsection Gravity model
+  set Model name = radial constant
+  subsection Radial constant
+    set Magnitude = 10
+  end
+end
+
+# This is an additional compositional model for density anomaly imposed in a background viscosity
+subsection Compositional fields
+  set Number of fields = 2
+end
+
+subsection Initial composition model
+  set Model name  = function
+    subsection Function
+     set Coordinate system			= spherical
+     set Variable names			    = r,phi,theta,t
+     set Function constants         = zd=495e3, th=45e3, Ro=6371e3
+     set Function expression        = if(r<=(Ro-(zd-th)) && r>=(Ro-(zd+th)), if(cos(2*phi)>=0,sin(theta)*sin(theta)*cos(2*phi),0),0) ; if(r<=(Ro-(zd-th)) && r>=(Ro-(zd+th)), if(cos(2*phi)<0,abs(sin(theta)*sin(theta)*cos(2*phi)),0),0)             
+    end
+end
+# This section prescribes the initial condition in the temperature
+# field. In this case, it is based on a harmonic function.
+subsection Initial temperature model
+  set Model name = function
+    subsection Function
+      set Coordinate system                   = spherical
+      set Variable names                      = r, phi, theta 
+      set Function constants                  = M=100, To=1800 
+      set Function expression 		          = To + M*sin(theta)*sin(theta)*cos(2*phi)
+    end
+end
+
+# The material model is based on the simple material model, which assumes
+# a constant density, and other parameters as stated below.
+subsection Material model
+  set Model name = depth dependent
+    subsection Depth dependent model
+    set Base model              = composition reaction
+    set Depth dependence method = List
+    set Depth list              = 80e3,670e3,3000e3
+    # the viscosity given here is scaled with the reference viscosity of the base model below
+    # by eta_vl/eta_rb and then used as a prefactor, such that eta_vl=eta_rb gives a prefactor of 1
+    set Viscosity list          = 1e22,1e20,1e22
+    set Reference viscosity     = 1e22
+    end
+		
+    subsection Composition reaction model
+    set Reference density                              = 3300
+    set Viscosity                                      = 1e22
+    set Thermal expansion coefficient                  = 0
+    set Reference temperature                          = 1800
+    set Thermal conductivity                           = 4.125
+    set Reference specific heat                        = 1250
+    set Thermal viscosity exponent                     = 30
+    set Density differential for compositional field 1 = -10
+    set Density differential for compositional field 2 = 10  
+    end
+       
+end
+
+# For this calculation we only do 4 global refinement steps. This resolution
+# is too low to fully resolve the mantle flow, however it does capture
+# the main features.
+subsection Mesh refinement
+  set Initial global refinement          = 4
+  set Initial adaptive refinement        = 0
+end
+
+# We assume free slip at the inner and outer boundary
+subsection Boundary velocity model
+  set Tangential velocity boundary indicators = top, bottom
+end
+
+
+# We output the density, velocity, dynamic topography, geoid and heat flux density
+# for plotting.
+subsection Postprocess
+  set List of postprocessors = velocity statistics, heat flux map, heat flux statistics, dynamic topography, visualization, basic statistics, geoid self gravitation
+
+  subsection Visualization
+    set Output format                 = vtu
+    set List of output variables      = geoid, dynamic topography, heat flux map, density, viscosity, gravity
+    set Time between graphical output = 0
+    set Number of grouped files       = 1
+
+# We only have dirichlet boundaries with tangential velocities, so we can
+# increase the output resolution as described in the documentation of the 'heat
+# flux map' postprocessor.
+    subsection Heat flux map
+      set Output point wise heat flux = true
+    end
+  end
+
+  subsection Geoid self gravitation
+	set Maximum degree																								= 10
+    set Also output the gravity anomaly  																			= true
+	set Also output the spherical harmonic coefficients of CMB dynamic topography contribution 					    = true
+	set Also output the spherical harmonic coefficients of surface dynamic topography contribution 				    = true
+	set Also output the spherical harmonic coefficients of geoid anomaly 											= true
+	set Also output the spherical harmonic coefficients of density anomaly contribution 							= true
+	set Also output the spherical harmonic coefficients of CMB geoid anomaly			 							= true
+	set Also output the spherical harmonic coefficients of surface dynamic topography contribution to CMB geoid		= true
+	set Also output the spherical harmonic coefficients of CMB dynamic topography contribution to CMB geoid			= true
+	set Also output the spherical harmonic coefficients of density anomaly contribution to CMB geoid				= true
+    set Output CMB geoid anomaly         																			= true
+	set Also output the CMB gravity anomaly																			= true
+	set Include self-gravitation																					= true	
+	set Also output the spherical harmonic coefficients of geoid anomaly with self-gravitation						= true
+	set Also output the spherical harmonic coefficients of CMB geoid anomaly with self-gravitation					= true
+	set Output geoid anomaly with self-gravitation																	= true
+	set Output CMB geoid anomaly with self-gravitation																= true
+	set Also output the gravity anomaly with self-gravitation														= true
+	set Also output the CMB gravity anomaly with self-gravitation													= true
+	set Output surface dynamic topography with self-gravitation														= true
+	set Output CMB dynamic topography with self-gravitation															= true	
+	#set Output data in geographical coordinates = true
+  end
+end
+
+subsection Nullspace removal
+  set Remove nullspace = net rotation
+end
